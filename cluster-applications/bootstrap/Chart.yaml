@@ -1,0 +1,4 @@
+apiVersion: v2
+name: platform-bootstrap
+description: Root App-of-Apps — generates one ArgoCD Application per platform group
+version: 0.1.0

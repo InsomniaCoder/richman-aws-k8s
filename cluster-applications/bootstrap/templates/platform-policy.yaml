@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-policy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.syncWaves.policy | quote }}
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: HEAD
+    path: cluster-applications/platform-policy
+    helm:
+      valueFiles:
+        - values/base.yaml
+        - values/{{ .Values.environment }}.yaml
+      parameters:
+        - name: clusterName
+          value: {{ .Values.clusterName }}
+        - name: environment
+          value: {{ .Values.environment }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    {{- toYaml .Values.syncPolicy | nindent 4 }}

@@ -1,0 +1,27 @@
+# Injected by Terraform at bootstrap time via platform-env-values ConfigMap.
+# Do not edit manually — these are overridden by environments/<env>.yaml.
+clusterName: ""
+environment: "production"
+region: ""
+accountId: ""
+domain: ""
+
+repoURL: ""   # set via REPO_URL env var in argocd-bootstrap Terraform module
+
+syncPolicy:
+  automated:
+    prune: true
+    selfHeal: true
+  syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+
+syncWaves:
+  core:         "1"
+  networking:   "2"
+  secrets:      "2"
+  autoscaling:  "3"
+  nodepools:    "4"
+  policy:       "5"
+  observability: "6"
+  gitops:       "7"

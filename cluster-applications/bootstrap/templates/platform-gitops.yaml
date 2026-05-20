@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-gitops
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.syncWaves.gitops | quote }}
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: HEAD
+    path: cluster-applications/platform-gitops
+    helm:
+      valueFiles:
+        - values/base.yaml
+        - values/{{ .Values.environment }}.yaml
+      parameters:
+        - name: clusterName
+          value: {{ .Values.clusterName }}
+        - name: environment
+          value: {{ .Values.environment }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    {{- toYaml .Values.syncPolicy | nindent 4 }}

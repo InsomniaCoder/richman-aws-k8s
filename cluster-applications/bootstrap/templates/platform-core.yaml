@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-core
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.syncWaves.core | quote }}
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: HEAD
+    path: cluster-applications/platform-core
+    helm:
+      valueFiles:
+        - values/base.yaml
+        - values/{{ .Values.environment }}.yaml
+      parameters:
+        - name: clusterName
+          value: {{ .Values.clusterName }}
+        - name: environment
+          value: {{ .Values.environment }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    {{- toYaml .Values.syncPolicy | nindent 4 }}
