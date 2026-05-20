@@ -90,3 +90,17 @@ resource "aws_ssm_parameter" "cluster_ca" {
   value = aws_eks_cluster.main.certificate_authority[0].data
   tags  = local.common_tags
 }
+
+resource "aws_ssm_parameter" "nlb_sg_id" {
+  name  = "/${var.project_name}/${var.environment}/cluster/nlb-sg-id"
+  type  = "String"
+  value = aws_security_group.nlb.id
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "node_sg_id" {
+  name  = "/${var.project_name}/${var.environment}/cluster/node-sg-id"
+  type  = "String"
+  value = aws_security_group.nodes.id
+  tags  = local.common_tags
+}
