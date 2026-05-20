@@ -12,7 +12,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: cloud-custodian
-              image: cloudcustodian/c7n:latest
+              image: "cloudcustodian/c7n:{{ .Values.version }}"
               command:
                 - c7n
                 - run
