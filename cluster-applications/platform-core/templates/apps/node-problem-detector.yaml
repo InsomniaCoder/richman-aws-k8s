@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: node-problem-detector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    chart: node-problem-detector
+    repoURL: https://charts.deliveryhero.io/
+    targetRevision: {{ .Values.nodeProblemDetector.version }}
+    helm:
+      valuesObject:
+        tolerations:
+          - operator: Exists
+        resources:
+          requests:
+            cpu: 10m
+            memory: 80Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

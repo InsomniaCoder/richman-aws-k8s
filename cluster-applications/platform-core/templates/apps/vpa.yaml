@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vpa
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    # Protect CRDs on uninstall
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  project: default
+  source:
+    chart: vpa
+    repoURL: https://charts.fairwinds.com/stable
+    targetRevision: {{ .Values.vpa.version }}
+    helm:
+      valuesObject:
+        recommender:
+          extraArgs:
+            pod-recommendation-min-cpu-millicores: {{ .Values.vpa.recommenderMinCpu }}
+            pod-recommendation-min-memory-mb: {{ .Values.vpa.recommenderMinMemMb }}
+            oom-bump-up-ratio: "1.5"
+          resources:
+            requests: { cpu: 200m, memory: 2Gi }
+            limits:   { cpu: 500m, memory: 4Gi }
+        updater:
+          extraArgs:
+            # Do not evict single-replica deployments — prevents taking down singletons
+            min-replicas: "1"
+            feature-gates: "InPlaceOrRecreate=true"
+          resources:
+            requests: { cpu: 50m,  memory: 500Mi }
+            limits:   { cpu: 200m, memory: 1Gi }
+        admissionController:
+          replicaCount: {{ .Values.vpa.admissionReplicas }}
+          extraArgs:
+            feature-gates: "InPlaceOrRecreate=true"
+            kube-api-qps: "20"
+            kube-api-burst: "80"
+          resources:
+            requests: { cpu: 50m,  memory: 500Mi }
+            limits:   { cpu: 200m, memory: 2Gi }
+          # Run on system nodes — webhook must not be on evictable nodes
+          tolerations:
+            - key: system-node; operator: Equal; value: "true"; effect: NoSchedule
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: system-node; operator: In; values: ["true"]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

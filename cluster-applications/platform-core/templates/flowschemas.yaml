@@ -1,0 +1,58 @@
+---
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: FlowSchema
+metadata:
+  name: platform-critical
+spec:
+  matchingPrecedence: 100
+  priorityLevelConfiguration:
+    name: exempt
+  distinguisherMethod:
+    type: ByUser
+  rules:
+    - subjects:
+        - kind: ServiceAccount
+          serviceAccount:
+            namespace: kube-system
+            name: "*"
+        - kind: ServiceAccount
+          serviceAccount:
+            namespace: argocd
+            name: "*"
+        - kind: ServiceAccount
+          serviceAccount:
+            namespace: karpenter
+            name: "*"
+      resourceRules:
+        - verbs: ["*"]
+          apiGroups: ["*"]
+          resources: ["*"]
+---
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: FlowSchema
+metadata:
+  name: platform-high
+spec:
+  matchingPrecedence: 200
+  priorityLevelConfiguration:
+    name: workload-high
+  distinguisherMethod:
+    type: ByUser
+  rules:
+    - subjects:
+        - kind: ServiceAccount
+          serviceAccount:
+            namespace: monitoring
+            name: "*"
+        - kind: ServiceAccount
+          serviceAccount:
+            namespace: external-secrets
+            name: "*"
+        - kind: ServiceAccount
+          serviceAccount:
+            namespace: cert-manager
+            name: "*"
+      resourceRules:
+        - verbs: ["*"]
+          apiGroups: ["*"]
+          resources: ["*"]

@@ -1,0 +1,4 @@
+apiVersion: v2
+name: platform-core
+description: Namespaces, RBAC, PriorityClasses, APF flowschemas, and core tooling
+version: 0.1.0

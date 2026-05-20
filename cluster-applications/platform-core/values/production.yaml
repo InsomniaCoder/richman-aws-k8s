@@ -1,0 +1,3 @@
+# Production-specific overrides. Merge on top of base.yaml.
+vpa:
+  admissionReplicas: 3   # HA — VPA admission webhook is a scheduling SPOF

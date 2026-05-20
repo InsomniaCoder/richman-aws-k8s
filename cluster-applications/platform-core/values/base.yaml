@@ -1,0 +1,21 @@
+clusterName: ""
+environment: ""
+
+vpa:
+  version: "4.10.1"
+  recommenderMinCpu: "15"
+  recommenderMinMemMb: "100"
+  admissionReplicas: 3
+
+metricsServer:
+  version: "3.12.2"
+
+nodeProblemDetector:
+  version: "2.3.14"
+
+nodeLocalDns:
+  version: "2.0.9"
+  localDnsIp: "169.254.20.10"
+
+reloader:
+  version: "1.1.0"

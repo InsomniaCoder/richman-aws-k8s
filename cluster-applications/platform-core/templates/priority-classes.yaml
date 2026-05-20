@@ -1,0 +1,24 @@
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: platform-high
+value: 1000000
+globalDefault: false
+description: "Platform components that must not be evicted under normal pressure."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: platform-default
+value: 500000
+globalDefault: false
+description: "Default for platform tooling."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: workload-default
+value: 100000
+globalDefault: true
+description: "Default for application workloads."

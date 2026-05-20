@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: node-local-dns
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    chart: node-local-dns
+    repoURL: https://helm.cilium.io/
+    targetRevision: {{ .Values.nodeLocalDns.version }}
+    helm:
+      valuesObject:
+        config:
+          localDns: {{ .Values.nodeLocalDns.localDnsIp }}
+        tolerations:
+          - operator: Exists
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

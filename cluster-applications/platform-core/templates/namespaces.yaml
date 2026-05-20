@@ -1,0 +1,10 @@
+{{- $namespaces := list "monitoring" "external-secrets" "external-dns" "karpenter" "kyverno" "cloud-custodian" "velero" "cert-manager" "traefik" -}}
+{{- range $namespaces }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+{{- end }}

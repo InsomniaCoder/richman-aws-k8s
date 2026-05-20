@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reloader
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    chart: reloader
+    repoURL: https://stakater.github.io/stakater-charts
+    targetRevision: {{ .Values.reloader.version }}
+    helm:
+      valuesObject:
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 256Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
