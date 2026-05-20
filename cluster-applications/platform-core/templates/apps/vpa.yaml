@@ -17,8 +17,8 @@ spec:
       valuesObject:
         recommender:
           extraArgs:
-            pod-recommendation-min-cpu-millicores: {{ .Values.vpa.recommenderMinCpu }}
-            pod-recommendation-min-memory-mb: {{ .Values.vpa.recommenderMinMemMb }}
+            pod-recommendation-min-cpu-millicores: "{{ .Values.vpa.recommenderMinCpu }}"
+            pod-recommendation-min-memory-mb: "{{ .Values.vpa.recommenderMinMemMb }}"
             oom-bump-up-ratio: "1.5"
           resources:
             requests: { cpu: 200m, memory: 2Gi }
@@ -42,12 +42,19 @@ spec:
             limits:   { cpu: 200m, memory: 2Gi }
           # Run on system nodes — webhook must not be on evictable nodes
           tolerations:
-            - key: system-node; operator: Equal; value: "true"; effect: NoSchedule
-          nodeAffinity:
-            requiredDuringSchedulingIgnoredDuringExecution:
-              nodeSelectorTerms:
-                - matchExpressions:
-                    - key: system-node; operator: In; values: ["true"]
+            - key: system-node
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: system-node
+                        operator: In
+                        values:
+                          - "true"
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
