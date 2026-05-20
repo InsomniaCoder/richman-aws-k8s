@@ -1,10 +1,3 @@
-data "aws_eks_cluster" "main" {
-  name = var.cluster_name
-}
-data "aws_eks_cluster_auth" "main" {
-  name = var.cluster_name
-}
-
 locals {
   common_tags = merge(var.tags, {
     Project     = var.project_name

@@ -96,6 +96,7 @@ inputs = {
   region             = local.l.region
   domain_name        = local.l.domain_name
   availability_zones = local.l.availability_zones
+  argocd_version     = "7.7.0"
   repo_url           = get_env("REPO_URL", "")
   account_id         = local.account_id
 
