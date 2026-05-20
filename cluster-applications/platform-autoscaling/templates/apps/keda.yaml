@@ -10,7 +10,7 @@ spec:
   source:
     chart: keda
     repoURL: https://kedacore.github.io/charts
-    targetRevision: {{ .Values.keda.version }}
+    targetRevision: {{ .Values.keda.version | quote }}
     helm:
       valuesObject:
         crds:

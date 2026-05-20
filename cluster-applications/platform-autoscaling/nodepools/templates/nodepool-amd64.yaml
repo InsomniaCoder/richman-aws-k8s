@@ -4,9 +4,6 @@ metadata:
   name: general-amd64
 spec:
   template:
-    metadata:
-      labels:
-        karpenter.sh/capacity-type: spot
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws

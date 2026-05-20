@@ -12,7 +12,7 @@ spec:
   source:
     chart: karpenter
     repoURL: public.ecr.aws/karpenter
-    targetRevision: {{ .Values.karpenter.version }}
+    targetRevision: {{ .Values.karpenter.version | quote }}
     helm:
       valuesObject:
         settings:
