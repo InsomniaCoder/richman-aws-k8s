@@ -8,16 +8,15 @@ The companion to [poorman-aws-k8s](https://github.com/insomniacoder/poorman-aws-
 
 | Layer | Components |
 |---|---|
-| Compute | EKS 1.31+, system managed node group (ON_DEMAND), Karpenter workload nodes (SPOT + ON_DEMAND), KEDA |
-| Networking | VPC CNI + prefix delegation + NetworkPolicy enforcement, 3-tier × 3-AZ subnets, AWS LBC + Traefik |
-| Security | Kyverno policies, RBAC, default-deny NetworkPolicies, EKS Pod Identity |
+| Compute | EKS 1.31+, system managed node group (ON_DEMAND), Karpenter (gen 7+ preferred + overlay fallback, business-hours disruption budget), KEDA |
+| Networking | VPC CNI + prefix delegation + NetworkPolicy enforcement, 3-tier × 3-AZ subnets, AWS LBC + Traefik (public + internal), Retina (eBPF network metrics) |
+| Security | Kyverno policies, RBAC, default-deny NetworkPolicies, kubelet port block, privilege escalation deny, EKS Pod Identity |
 | Secrets | External Secrets Operator + AWS Secrets Manager |
 | Observability | OTEL Operator, kube-prometheus-stack, Loki, noe, yace (CloudWatch) |
-| GitOps | ArgoCD App-of-Apps with 7 sync waves, progressive sync enabled |
+| GitOps | ArgoCD App-of-Apps with 7 sync waves, progressive sync enabled, Renovate (dependency updates) |
 | Reliability | Velero backups, VPA, PriorityClasses |
 | Governance | Cloud Custodian |
 
-See the full design: [`docs/superpowers/specs/2026-05-20-richman-aws-eks-design.md`](docs/superpowers/specs/2026-05-20-richman-aws-eks-design.md)
 
 ## Prerequisites
 
@@ -89,12 +88,22 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 No module changes required.
 
-## Adding a second cluster (multi-cluster ApplicationSets)
+## Adding a second cluster
 
-1. Create `live/production/cluster-2/` pointing at the same modules with a different `cluster_name`
-2. After deploying, migrate Applications to ApplicationSets using the cluster generator
-3. Enable progressive sync (`enable-progressive-syncs` is already set in ArgoCD config)
-4. See design doc § "Multi-cluster extension path" for the ApplicationSet pattern
+```bash
+cp -r live/production live/production-2
+# Edit live/production-2/env.hcl — change cluster_name (and optionally region, AZs)
+# The 6 stack files (account/vpc, account/iam, account/ecr, cluster/eks,
+# cluster/karpenter, cluster/argocd-bootstrap) each contain 2 lines and need no editing.
+```
+
+Deploy:
+```bash
+cd live/production-2/account/vpc && terragrunt apply
+# ... same sequence as First deploy step 3-4
+```
+
+For multi-cluster GitOps with canary rollouts, see `ARCHITECTURE.md` § "Extending the Platform" for the ApplicationSet progressive sync pattern.
 
 ## Using IRSA for cross-account access
 
@@ -112,7 +121,7 @@ The EKS cluster already has an OIDC provider configured.
 
 ## Design principles
 
-See [`docs/superpowers/specs/2026-05-20-richman-aws-eks-design.md`](docs/superpowers/specs/2026-05-20-richman-aws-eks-design.md) for full rationale on every technology choice.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for rationale on every technology choice.
 
 ## License
 

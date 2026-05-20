@@ -1,8 +1,11 @@
+# Preferred pool: newest generation ARM64 instances (gen 7+).
+# Higher weight (100) means Karpenter schedules here first.
 apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
   name: general-arm64
 spec:
+  weight: 100
   template:
     spec:
       nodeClassRef:
@@ -21,14 +24,63 @@ spec:
           values: ["m", "c", "r"]
         - key: karpenter.k8s.aws/instance-generation
           operator: Gt
-          values: ["5"]
+          # Gen 6 = 6, so Gt 6 = gen 7+: m7g, c7g, r7g
+          values: ["6"]
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 1m
     budgets:
+      # Business hours: no voluntary disruption.
+      - schedule: "0 9 * * 1-5"
+        duration: 8h
+        nodes: "0"
+      # Off-hours: staggered +5min offset from amd64 (:05/:20/:35/:50) to
+      # prevent simultaneous replacement waves across pools.
       - schedule: "{{ .Values.nodePools.generalArm64.disruptionBudgetSchedule | default \"5,20,35,50 * * * *\" }}"
         duration: 10m
         nodes: "10%"
   limits:
     cpu: 500
     memory: 2000Gi
+---
+# Overlay pool: older generation ARM64 instances (gen 5-6).
+# Lower weight (10) means Karpenter only uses this when preferred pools cannot satisfy demand.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-arm64-overlay
+spec:
+  weight: 10
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["arm64"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["m", "c", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: In
+          # gen 5 and gen 6: m5, m6g, c5, c6g, r5, r6g
+          values: ["5", "6"]
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m
+    budgets:
+      - schedule: "0 9 * * 1-5"
+        duration: 8h
+        nodes: "0"
+      - schedule: "{{ .Values.nodePools.generalArm64Overlay.disruptionBudgetSchedule | default \"5,20,35,50 * * * *\" }}"
+        duration: 10m
+        nodes: "10%"
+  limits:
+    cpu: 250
+    memory: 1000Gi

@@ -4,6 +4,12 @@ region: ""
 accountId: ""
 nodePools:
   generalAmd64:
+    # Off-hours disruption window — staggered at :00/:15/:30/:45
+    disruptionBudgetSchedule: "0,15,30,45 * * * *"
+  generalAmd64Overlay:
     disruptionBudgetSchedule: "0,15,30,45 * * * *"
   generalArm64:
+    # Off-hours disruption window — staggered at :05/:20/:35/:50 (offset from amd64)
+    disruptionBudgetSchedule: "5,20,35,50 * * * *"
+  generalArm64Overlay:
     disruptionBudgetSchedule: "5,20,35,50 * * * *"

@@ -1,0 +1,64 @@
+# Retina (Microsoft) — eBPF-based network observability DaemonSet.
+# Surfaces per-node and per-pod network metrics: packet drops, TCP retransmits,
+# DNS errors, latency, and connection statistics — without application changes.
+#
+# Why Retina alongside Prometheus: cluster metrics alone miss the network layer.
+# Retina metrics land in Prometheus (via ServiceMonitor) and Grafana dashboards
+# show where packets are being dropped, which pods have high retransmit rates,
+# and whether DNS latency is contributing to request failures.
+#
+# DaemonSet mode: runs on every node (system + Karpenter workload nodes) using
+# tolerations that match all taints. eBPF probes are loaded in the host network
+# namespace — this is intentional and why system namespace exclusion from
+# restrict-host-namespaces policy is required.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: retina
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    chart: retina
+    repoURL: https://microsoft.github.io/retina/charts
+    targetRevision: {{ .Values.retina.version | quote }}
+    helm:
+      valuesObject:
+        # Expose Prometheus metrics for scraping
+        retinaPort: 10093
+        enabledPlugin_linux: |-
+          dropreason,packetforward,dns,linuxutil,tcpretrans
+        # Tolerate all taints — DaemonSet must run on system nodes AND workload nodes.
+        # Network observability is only useful if it covers every node.
+        tolerations:
+          - operator: Exists
+        # Operator does not need to run on every node
+        operator:
+          tolerations:
+            - key: system-node
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: system-node
+                        operator: In
+                        values:
+                          - "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /metadata/annotations
+        - /metadata/labels

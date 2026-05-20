@@ -1,17 +1,2 @@
-include "root" {
-  path = find_in_parent_folders("root.hcl")
-}
-
-locals {
-  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-}
-
-terraform {
-  source = "../../../../modules/account/iam"
-}
-
-inputs = {
-  project_name = local.env.locals.project_name
-  environment  = local.env.locals.environment
-  tags         = { ManagedBy = "terraform" }
-}
+include "root"    { path = find_in_parent_folders("root.hcl") }
+include "catalog" { path = "${get_repo_root()}/_catalog/account/iam.hcl" }

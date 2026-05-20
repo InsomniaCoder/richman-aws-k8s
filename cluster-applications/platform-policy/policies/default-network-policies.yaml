@@ -1,15 +1,20 @@
 # This policy implements a "default-isolated, operationally sane" network model
-# for all workload namespaces. On namespace creation, Kyverno generates four NetworkPolicies:
+# for all workload namespaces. On namespace creation, Kyverno generates five NetworkPolicies:
 #
-#  1. default-deny-ingress         — blocks all cross-namespace ingress (tenant isolation)
-#  2. allow-ingress-from-traefik   — lets the ingress controller route HTTP/HTTPS traffic in
-#  3. allow-ingress-from-monitoring — lets Prometheus scrape metrics endpoints
-#  4. allow-ingress-same-namespace  — allows pod-to-pod communication within the same namespace
+#  1. default-deny-ingress               — blocks all cross-namespace ingress (tenant isolation)
+#  2. allow-ingress-from-traefik         — lets the public ingress controller route traffic in
+#  3. allow-ingress-from-traefik-internal — lets the internal ingress controller route traffic in
+#  4. allow-ingress-from-monitoring      — lets Prometheus scrape metrics endpoints
+#  5. allow-ingress-same-namespace       — allows pod-to-pod communication within the same namespace
+#  6. deny-egress-to-kubelet             — blocks TCP 10250 egress (pods must not reach kubelet APIs)
 #
-# Why ingress-only restriction: egress is left unrestricted (no policyTypes: [Egress]).
-# This means workloads can reach external services, kube-dns, and system namespaces without
-# needing extra rules. Only cross-namespace INGRESS is locked down — the direction that
-# matters for tenant isolation.
+# Why ingress-only restriction (except kubelet): egress is left unrestricted so workloads can
+# reach external services, kube-dns, and system namespaces without extra rules.
+# Only cross-namespace ingress (tenant isolation direction) and kubelet egress are locked down.
+#
+# Why block TCP 10250 egress: the kubelet API endpoint exposes container logs, exec, and node
+# metadata. A compromised pod reaching kubelet can read other pods' logs or pivot to node-level
+# access. AWS VPC CNI NetworkPolicy enforces this as a genuine kernel-level block.
 #
 # Why synchronize: true: if someone kubectl-deletes one of these policies, Kyverno regenerates it.
 # Without this, a namespace can inadvertently lose its isolation guarantees.
@@ -47,6 +52,7 @@ spec:
                 - external-secrets
                 - external-dns
                 - traefik
+                - traefik-internal
                 - velero
                 - cloud-custodian
       generate:
@@ -61,11 +67,10 @@ spec:
             policyTypes:
               - Ingress
 
-    # Rule 2: Allow ingress from the Traefik ingress controller namespace.
+    # Rule 2: Allow ingress from the public Traefik ingress controller namespace.
     # Traefik routes HTTP/HTTPS by connecting from its own namespace to the pod IP.
     # Without this rule, workloads behind an Ingress resource receive no traffic despite
     # the Ingress being configured correctly — the NetworkPolicy silently drops it.
-    # Uses kubernetes.io/metadata.name which Kubernetes auto-applies to every namespace.
     - name: generate-allow-ingress-from-traefik
       match:
         any:
@@ -87,6 +92,7 @@ spec:
                 - external-secrets
                 - external-dns
                 - traefik
+                - traefik-internal
                 - velero
                 - cloud-custodian
       generate:
@@ -106,7 +112,51 @@ spec:
             policyTypes:
               - Ingress
 
-    # Rule 3: Allow ingress from the monitoring namespace.
+    # Rule 3: Allow ingress from the internal Traefik ingress controller namespace.
+    # Same rationale as rule 2 — traefik-internal routes VPC-internal and service-mesh traffic.
+    # Both ingress controllers must be whitelisted independently.
+    - name: generate-allow-ingress-from-traefik-internal
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - traefik-internal
+                - velero
+                - cloud-custodian
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: allow-ingress-from-traefik-internal
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            ingress:
+              - from:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: traefik-internal
+            policyTypes:
+              - Ingress
+
+    # Rule 4: Allow ingress from the monitoring namespace.
     # Prometheus scrapes metrics by opening a TCP connection TO the workload pod's metrics port.
     # Without this, ServiceMonitor and PodMonitor objects silently collect nothing —
     # there is no error, just missing data and broken dashboards.
@@ -131,6 +181,7 @@ spec:
                 - external-secrets
                 - external-dns
                 - traefik
+                - traefik-internal
                 - velero
                 - cloud-custodian
       generate:
@@ -150,7 +201,7 @@ spec:
             policyTypes:
               - Ingress
 
-    # Rule 4: Allow pod-to-pod communication within the same namespace.
+    # Rule 5: Allow pod-to-pod communication within the same namespace.
     # default-deny-ingress blocks ALL ingress, including from the pod's own namespace.
     # This rule restores intra-namespace communication — typically required for:
     # sidecars, init containers, service meshes, and multi-pod application components.
@@ -175,6 +226,7 @@ spec:
                 - external-secrets
                 - external-dns
                 - traefik
+                - traefik-internal
                 - velero
                 - cloud-custodian
       generate:
@@ -191,3 +243,62 @@ spec:
                   - podSelector: {}
             policyTypes:
               - Ingress
+
+    # Rule 6: Block egress to kubelet API (TCP 10250).
+    # The kubelet API exposes container exec, log tailing, and node metadata. A compromised pod
+    # reaching 10250 can read other pods' logs or pivot to node-level access. AWS VPC CNI
+    # NetworkPolicy controller enforces this as a kernel-level eBPF rule — not just advisory.
+    #
+    # NetworkPolicy is allow-list based: adding policyTypes: [Egress] blocks ALL egress
+    # except what is explicitly listed. This policy allows all TCP (except 10250) and all UDP,
+    # effectively implementing "deny only port 10250 to any destination" without restricting
+    # other workload egress. Port ranges (endPort) require Kubernetes 1.25+ and VPC CNI 1.14+.
+    - name: generate-deny-egress-to-kubelet
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - traefik-internal
+                - velero
+                - cloud-custodian
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: deny-egress-to-kubelet
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Egress
+            egress:
+              # Allow all TCP ports below kubelet (1-10249)
+              - ports:
+                  - protocol: TCP
+                    port: 1
+                    endPort: 10249
+              # Allow all TCP ports above kubelet (10251-65535)
+              - ports:
+                  - protocol: TCP
+                    port: 10251
+                    endPort: 65535
+              # Allow all UDP (DNS port 53, etc.)
+              - ports:
+                  - protocol: UDP

@@ -1,0 +1,63 @@
+# Mutate Services in workload namespaces to prefer same-AZ endpoint routing.
+#
+# service.kubernetes.io/topology-mode: "Auto" tells the EndpointSlice controller
+# to add topology hints to endpoints. kube-proxy on each node then preferentially
+# routes traffic to endpoints in the same AZ as the calling pod.
+#
+# Why "Auto" not explicit zone hints: "Auto" is the safe production setting — it
+# falls back to random endpoint selection if same-AZ endpoints are unavailable
+# or if the ratio would cause imbalance. This is cost optimization (avoids
+# cross-AZ data transfer charges at ~$0.01/GB), not a hard availability constraint.
+#
+# Why mutate (not require): topology-mode affects routing, not correctness.
+# Workloads should not fail to deploy if this annotation is absent. A mutation
+# that sets a safe default is appropriate; an enforcement policy would be wrong.
+#
+# Why skip system namespaces: system components (kube-dns, Prometheus, ArgoCD)
+# need to reach pods across all AZs and should not be constrained by AZ affinity.
+# Topology-aware routing is meaningful for workload services, not cluster services.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: topology-aware-services
+spec:
+  rules:
+    - name: add-topology-mode
+      match:
+        any:
+          - resources:
+              kinds:
+                - Service
+              operations:
+                - CREATE
+                - UPDATE
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - traefik-internal
+                - velero
+                - cloud-custodian
+          # Headless services (ClusterIP: None) have no endpoints to distribute —
+          # topology hints are meaningless for them.
+          - resources:
+              selector:
+                matchLabels:
+                  service.kubernetes.io/topology-mode: "disabled"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations:
+              # Only set if not already present — do not override explicit operator choices.
+              +(service.kubernetes.io/topology-mode): "Auto"

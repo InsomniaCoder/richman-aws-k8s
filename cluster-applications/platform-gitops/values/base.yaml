@@ -6,3 +6,7 @@ repoURL: ""
 velero:
   version: "7.2.1"
 scheduleHour: "2"  # 02:00 UTC daily backup
+
+renovate:
+  version: "37.427.0"
+  repositories: []  # list of "org/repo" strings — e.g. ["your-org/richman-aws-eks"]

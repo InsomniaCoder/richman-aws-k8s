@@ -1,0 +1,112 @@
+# Security baseline policies derived from Kubernetes Pod Security Standards (Restricted/Baseline).
+# These cover the most impactful privilege escalation vectors with low false-positive rates.
+#
+# Each policy targets the Namespace selection used by the rest of the platform:
+# system namespaces are excluded because some system components legitimately require
+# elevated capabilities (node-problem-detector, Retina/eBPF, OTEL DaemonSets).
+# Kyverno's ClusterAdmissionReport will surface exceptions if needed.
+---
+# Deny allowPrivilegeEscalation: true in workload containers.
+# This flag allows a process to gain more privileges than its parent — a critical
+# vector for container escape. Most containers do not need it.
+# Enforcement: Kyverno blocks the admission if the field is explicitly set to true.
+# Default behavior (field absent) is safe — Linux kernels default to no-new-privs
+# when the container runtime sets securityContext.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: deny-privilege-escalation
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: deny-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+                - UPDATE
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - traefik-internal
+                - velero
+                - cloud-custodian
+      validate:
+        message: "allowPrivilegeEscalation must be false or unset. Set securityContext.allowPrivilegeEscalation: false."
+        foreach:
+          - list: "request.object.spec.containers + request.object.spec.initContainers + request.object.spec.ephemeralContainers"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.allowPrivilegeEscalation }}"
+                    operator: Equals
+                    value: "true"
+---
+# Deny hostNetwork, hostPID, hostIPC in workload pods.
+# These flags share the node's network stack, process tree, or IPC namespace
+# with the pod — they effectively remove container isolation for the relevant
+# subsystem. Legitimate uses (Retina, node-problem-detector, DaemonSets that
+# must inspect host interfaces) exist only in system namespaces, which are excluded.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-host-namespaces
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: restrict-host-namespaces
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+                - UPDATE
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - traefik-internal
+                - velero
+                - cloud-custodian
+      validate:
+        message: "hostNetwork, hostPID, and hostIPC are not permitted in workload namespaces."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.hostNetwork }}"
+                operator: Equals
+                value: "true"
+              - key: "{{ request.object.spec.hostPID }}"
+                operator: Equals
+                value: "true"
+              - key: "{{ request.object.spec.hostIPC }}"
+                operator: Equals
+                value: "true"

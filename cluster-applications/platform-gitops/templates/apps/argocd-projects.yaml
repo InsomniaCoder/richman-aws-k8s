@@ -27,6 +27,8 @@ spec:
     - https://kubernetes-sigs.github.io/metrics-server/
     - https://mogensen.github.io/yet-another-cloudwatch-exporter/
     - https://adevinta.github.io/noe/
+    - https://microsoft.github.io/retina/charts
+    - https://docs.renovatebot.com/helm-charts
   destinations:
     - namespace: "*"
       server: https://kubernetes.default.svc

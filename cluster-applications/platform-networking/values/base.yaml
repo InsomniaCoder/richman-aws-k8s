@@ -20,3 +20,6 @@ traefik:
 externalDns:
   version: "1.15.0"
   txtOwnerId: ""    # set from clusterName at render time
+
+retina:
+  version: "v0.0.30"

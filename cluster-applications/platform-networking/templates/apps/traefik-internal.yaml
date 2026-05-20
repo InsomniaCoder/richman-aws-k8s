@@ -1,0 +1,76 @@
+# Internal Traefik — routes VPC-internal traffic via an internal NLB.
+# Use this for: admin UIs, internal APIs, inter-service traffic that must not be internet-facing.
+# Services annotate with ingressClassName: traefik-internal to use this instance.
+#
+# Why a separate instance rather than middleware rules on the public Traefik:
+# Two separate instances give independent blast radius — a misconfigured public Ingress
+# cannot accidentally expose an internal route. Separate namespaces (traefik vs traefik-internal)
+# also allow scoped RBAC and independent NetworkPolicy rules.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik-internal
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    chart: traefik
+    repoURL: https://helm.traefik.io/traefik
+    targetRevision: {{ .Values.traefik.version }}
+    helm:
+      valuesObject:
+        # Unique IngressClass name so workloads can explicitly target this instance.
+        ingressClass:
+          enabled: true
+          isDefaultClass: false
+          name: traefik-internal
+        deployment:
+          replicas: {{ .Values.traefik.replicas }}
+        # Internal NLB — not internet-facing. Only reachable from within the VPC.
+        # Use this for admin UIs, internal APIs, inter-service traffic.
+        service:
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: "external"
+            service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+            service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+            service.beta.kubernetes.io/aws-load-balancer-security-groups: {{ .Values.nlbSecurityGroupId | quote }}
+        # Same graceful shutdown as public Traefik — post-shutdown-grace-period < terminationGracePeriodSeconds.
+        terminationGracePeriodSeconds: 200
+        extraArgs:
+          - --entrypoints.web.transport.lifecycle.requestAcceptGraceTimeout=181
+          - --entrypoints.websecure.transport.lifecycle.requestAcceptGraceTimeout=181
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+        updateStrategy:
+          rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 1
+        podDisruptionBudget:
+          enabled: true
+          minAvailable: 1
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: system-node
+                      operator: In
+                      values:
+                        - "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik-internal
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]

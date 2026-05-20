@@ -1,0 +1,83 @@
+# Renovate — automated dependency update PRs.
+# Runs as a CronJob, opens PRs for: Helm chart version bumps (targetRevision),
+# Terraform module/provider version updates, container image tag updates, and
+# GitHub Actions step versions.
+#
+# Why in-cluster Renovate vs Renovate Cloud/GitHub App:
+# In-cluster gives full control over credentials and scheduling. The platform
+# already has ESO pulling secrets from Secrets Manager — the GitHub PAT lives
+# there and is never stored in cluster as a static secret.
+#
+# Renovate requires a GitHub PAT with: repo (read/write), pull_requests (write).
+# Create a secret in Secrets Manager:
+#   aws secretsmanager create-secret --name richman-production/renovate/github-token \
+#     --secret-string '{"token":"ghp_..."}'
+# Then create an ExternalSecret in the renovate namespace pointing at it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: renovate
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+spec:
+  project: default
+  source:
+    chart: renovate
+    repoURL: https://docs.renovatebot.com/helm-charts
+    targetRevision: {{ .Values.renovate.version | quote }}
+    helm:
+      valuesObject:
+        cronjob:
+          # Run nightly at 03:00 UTC — after Velero backup (02:00), before business hours
+          schedule: "0 3 * * *"
+          concurrencyPolicy: Forbid
+        renovate:
+          config: |
+            {
+              "platform": "github",
+              "repositories": [{{ .Values.renovate.repositories | toJson }}],
+              "automerge": false,
+              "labels": ["renovate", "dependencies"],
+              "assignees": [],
+              "prHourlyLimit": 5,
+              "prConcurrentLimit": 10,
+              "ignorePaths": ["**/node_modules/**"],
+              "packageRules": [
+                {
+                  "matchUpdateTypes": ["patch"],
+                  "automerge": true,
+                  "automergeType": "pr"
+                }
+              ],
+              "helm-values": {
+                "fileMatch": ["cluster-applications/**/*.yaml"]
+              },
+              "terraform": {
+                "enabled": true
+              }
+            }
+          # GitHub PAT injected from ExternalSecret — never stored as plaintext
+          envFrom:
+            - secretRef:
+                name: renovate-github-token
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: system-node
+                      operator: In
+                      values:
+                        - "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: renovate
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
