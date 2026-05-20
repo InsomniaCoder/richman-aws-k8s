@@ -60,6 +60,7 @@ resource "aws_eks_addon" "vpc_cni" {
 }
 
 data "aws_region" "current" {}
+data "aws_partition" "current" {}
 
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name                = aws_eks_cluster.main.name

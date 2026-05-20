@@ -34,6 +34,13 @@ locals {
   pod_subnet_2 = run_cmd("--terragrunt-quiet", "aws", "ssm", "get-parameter",
     "--name", "/${local.l.project_name}/${local.l.environment}/vpc/pod-subnet-2",
     "--query", "Parameter.Value", "--output", "text")
+
+  account_id = trimspace(run_cmd("--terragrunt-quiet", "aws", "sts", "get-caller-identity",
+    "--query", "Account", "--output", "text"))
+
+  karpenter_controller_role_arn = run_cmd("--terragrunt-quiet", "aws", "ssm", "get-parameter",
+    "--name", "/${local.l.project_name}/${local.l.environment}/karpenter/controller-role-arn",
+    "--query", "Parameter.Value", "--output", "text")
 }
 
 terraform {
@@ -76,8 +83,17 @@ inputs = {
   system_node_min           = 2
   system_node_max           = 4
 
-  # Pod Identity associations — populated in Task 8 after addon IAM roles exist
-  pod_identity_associations = []
+  pod_identity_associations = [
+    { namespace = "kube-system",      service_account = "aws-load-balancer-controller", role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-aws-lbc" },
+    { namespace = "external-dns",     service_account = "external-dns",                 role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-external-dns" },
+    { namespace = "external-secrets", service_account = "external-secrets-sa",          role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-external-secrets" },
+    { namespace = "kube-system",      service_account = "ebs-csi-controller-sa",        role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-ebs-csi" },
+    { namespace = "velero",           service_account = "velero",                        role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-velero" },
+    { namespace = "cloud-custodian",  service_account = "cloud-custodian",               role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-cloud-custodian" },
+    { namespace = "monitoring",       service_account = "yace",                          role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-yace" },
+    { namespace = "monitoring",       service_account = "noe",                           role_arn = "arn:aws:iam::${local.account_id}:role/${local.l.cluster_name}-noe" },
+    { namespace = "karpenter",        service_account = "karpenter",                     role_arn = trimspace(local.karpenter_controller_role_arn) },
+  ]
 
   tags = { ManagedBy = "terraform" }
 }
