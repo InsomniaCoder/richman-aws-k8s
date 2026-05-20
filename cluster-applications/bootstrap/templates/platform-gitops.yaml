@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: {{ .Values.repoURL }}
+    repoURL: {{ .Values.repoURL | quote }}
     targetRevision: HEAD
     path: cluster-applications/platform-gitops
     helm:
@@ -17,9 +17,15 @@ spec:
         - values/{{ .Values.environment }}.yaml
       parameters:
         - name: clusterName
-          value: {{ .Values.clusterName }}
+          value: {{ .Values.clusterName | quote }}
         - name: environment
-          value: {{ .Values.environment }}
+          value: {{ .Values.environment | quote }}
+        - name: region
+          value: {{ .Values.region | quote }}
+        - name: accountId
+          value: {{ .Values.accountId | quote }}
+        - name: domain
+          value: {{ .Values.domain | quote }}
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
