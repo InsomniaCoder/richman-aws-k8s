@@ -59,17 +59,23 @@ resource "aws_iam_role_policy" "ecr_pull_through" {
   role = aws_iam_role.eks_node.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "ecr:BatchImportUpstreamImage",
-        "ecr:CreateRepository",
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchGetImage",
-        "ecr:GetDownloadUrlForLayer",
-      ]
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchImportUpstreamImage",
+          "ecr:CreateRepository",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+        ]
+        Resource = "arn:aws:ecr:*:${data.aws_caller_identity.current.account_id}:repository/*"
+      }
+    ]
   })
 }
 
@@ -78,10 +84,12 @@ resource "aws_ssm_parameter" "node_role_arn" {
   name  = "/${var.project_name}/${var.environment}/iam/node-role-arn"
   type  = "String"
   value = aws_iam_role.eks_node.arn
+  tags  = local.common_tags
 }
 
 resource "aws_ssm_parameter" "cluster_role_arn" {
   name  = "/${var.project_name}/${var.environment}/iam/cluster-role-arn"
   type  = "String"
   value = aws_iam_role.eks_cluster.arn
+  tags  = local.common_tags
 }
