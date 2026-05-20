@@ -37,7 +37,7 @@ spec:
         persistence:
           enabled: true
           storageClassName: gp3
-          size: {{ .Values.loki.storageSize }}
+          size: {{ .Values.loki.storageSize | quote }}
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

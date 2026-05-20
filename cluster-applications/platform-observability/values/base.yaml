@@ -12,7 +12,7 @@ kubePrometheusStack:
 
 loki:
   version: "6.25.0"
-  storageSize: 50Gi
+  storageSize: "50Gi"
 
 kubernetesEventsExporter:
   version: "2.4.0"

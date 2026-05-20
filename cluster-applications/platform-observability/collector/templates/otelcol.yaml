@@ -61,6 +61,8 @@ spec:
           job: true
       prometheusremotewrite:
         endpoint: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
+      debug:
+        verbosity: basic
     service:
       pipelines:
         logs:
@@ -70,7 +72,7 @@ spec:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, batch]
-          exporters: [logging]
+          exporters: [debug]
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
