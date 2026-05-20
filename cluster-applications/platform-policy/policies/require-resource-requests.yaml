@@ -3,6 +3,9 @@ kind: ClusterPolicy
 metadata:
   name: require-resource-requests
 spec:
+  # Audit (not Enforce) — flip to Enforce only after verifying all existing workloads have requests.
+  # Enforce on day-1 blocks any deployment without explicit CPU/memory requests, including
+  # third-party operators that don't set them. Audit surfaces violations without breaking deploys.
   validationFailureAction: Audit
   rules:
     - name: check-resource-requests

@@ -5,6 +5,8 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "5"
+    # Delete=false — Kyverno deletion cascades to CRD deletion. With Enforce policies in place,
+    # CRD removal causes the admission webhook to fail-close: no pods can be created cluster-wide.
     argocd.argoproj.io/sync-options: Delete=false
 spec:
   project: default
@@ -14,9 +16,13 @@ spec:
     targetRevision: {{ .Values.kyverno.version | quote }}
     helm:
       valuesObject:
+        # Admission controller is in the critical path for ALL pod creation.
         admissionController:
+          # 3 replicas: single replica = cluster-wide SPOF for pod scheduling (webhook unavailability = no pods start)
           replicas: {{ .Values.kyverno.admissionReplicas }}
           priorityClassName: system-cluster-critical
+          # System-node placement: webhook must not be on evictable workload nodes.
+          # A disrupted webhook during an incident blocks all pod recovery attempts.
           tolerations:
             - key: system-node
               operator: Equal
@@ -47,8 +53,8 @@ spec:
                   resources: [nodeclaims, nodepools]
                   verbs: [get, list, watch]
         config:
-          # Exclude Binding and Pod/binding — intercepting these adds latency
-          # to every pod scheduling operation
+          # Binding exclusion: Kyverno intercepts the Binding webhook used by the scheduler.
+          # Intercepting Bindings adds ~10-50ms latency to every pod placement — at scale this degrades scheduling throughput significantly.
           resourceFiltersExclude:
             - "[Binding,*,*]"
             - "[Pod/binding,*,*]"
@@ -62,6 +68,8 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+  # Kyverno updates CRD annotations on every controller startup. Without this, ArgoCD
+  # permanently shows the app as OutOfSync and may revert CRD annotations, causing reconcile loops.
   ignoreDifferences:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition

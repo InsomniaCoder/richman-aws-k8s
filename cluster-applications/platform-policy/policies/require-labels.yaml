@@ -3,6 +3,8 @@ kind: ClusterPolicy
 metadata:
   name: require-labels
 spec:
+  # Audit — enforcing labels on existing workloads would require a cluster-wide rollout.
+  # Use this to identify unlabeled workloads, then enforce in new namespaces or via namespace admission.
   validationFailureAction: Audit
   rules:
     - name: require-app-labels

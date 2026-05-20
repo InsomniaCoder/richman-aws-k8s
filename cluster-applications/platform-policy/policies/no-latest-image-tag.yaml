@@ -13,6 +13,9 @@ spec:
                 - Pod
       validate:
         message: "Image tag 'latest' is not allowed. Pin a specific version."
+        # Two conditions needed: ":latest" explicit AND missing ":" entirely.
+        # A bare image name like "nginx" (no tag) is equivalent to "nginx:latest" —
+        # the registry silently pulls latest. Without the NotContains check, "nginx" bypasses enforcement.
         foreach:
           - list: "request.object.spec.containers"
             deny:

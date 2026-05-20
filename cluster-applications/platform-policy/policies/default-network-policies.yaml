@@ -1,0 +1,193 @@
+# This policy implements a "default-isolated, operationally sane" network model
+# for all workload namespaces. On namespace creation, Kyverno generates four NetworkPolicies:
+#
+#  1. default-deny-ingress         — blocks all cross-namespace ingress (tenant isolation)
+#  2. allow-ingress-from-traefik   — lets the ingress controller route HTTP/HTTPS traffic in
+#  3. allow-ingress-from-monitoring — lets Prometheus scrape metrics endpoints
+#  4. allow-ingress-same-namespace  — allows pod-to-pod communication within the same namespace
+#
+# Why ingress-only restriction: egress is left unrestricted (no policyTypes: [Egress]).
+# This means workloads can reach external services, kube-dns, and system namespaces without
+# needing extra rules. Only cross-namespace INGRESS is locked down — the direction that
+# matters for tenant isolation.
+#
+# Why synchronize: true: if someone kubectl-deletes one of these policies, Kyverno regenerates it.
+# Without this, a namespace can inadvertently lose its isolation guarantees.
+#
+# Why system namespaces are excluded: they manage their own access patterns and frequently
+# require broader intra-cluster communication (e.g. ArgoCD reconciles across all namespaces,
+# Karpenter talks to the API server, Prometheus scrapes everywhere).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: default-network-policies
+spec:
+  rules:
+    # Rule 1: Deny all ingress — baseline isolation.
+    # This alone makes workload namespaces isolated by default. The subsequent rules
+    # poke specific holes for system components that MUST reach in.
+    - name: generate-default-deny-ingress
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - velero
+                - cloud-custodian
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny-ingress
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Ingress
+
+    # Rule 2: Allow ingress from the Traefik ingress controller namespace.
+    # Traefik routes HTTP/HTTPS by connecting from its own namespace to the pod IP.
+    # Without this rule, workloads behind an Ingress resource receive no traffic despite
+    # the Ingress being configured correctly — the NetworkPolicy silently drops it.
+    # Uses kubernetes.io/metadata.name which Kubernetes auto-applies to every namespace.
+    - name: generate-allow-ingress-from-traefik
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - velero
+                - cloud-custodian
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: allow-ingress-from-traefik
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            ingress:
+              - from:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: traefik
+            policyTypes:
+              - Ingress
+
+    # Rule 3: Allow ingress from the monitoring namespace.
+    # Prometheus scrapes metrics by opening a TCP connection TO the workload pod's metrics port.
+    # Without this, ServiceMonitor and PodMonitor objects silently collect nothing —
+    # there is no error, just missing data and broken dashboards.
+    - name: generate-allow-ingress-from-monitoring
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - velero
+                - cloud-custodian
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: allow-ingress-from-monitoring
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            ingress:
+              - from:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: monitoring
+            policyTypes:
+              - Ingress
+
+    # Rule 4: Allow pod-to-pod communication within the same namespace.
+    # default-deny-ingress blocks ALL ingress, including from the pod's own namespace.
+    # This rule restores intra-namespace communication — typically required for:
+    # sidecars, init containers, service meshes, and multi-pod application components.
+    - name: generate-allow-ingress-same-namespace
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - monitoring
+                - karpenter
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - external-dns
+                - traefik
+                - velero
+                - cloud-custodian
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: allow-ingress-same-namespace
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            ingress:
+              - from:
+                  - podSelector: {}
+            policyTypes:
+              - Ingress
