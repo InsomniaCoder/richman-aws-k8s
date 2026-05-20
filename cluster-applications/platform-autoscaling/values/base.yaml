@@ -1,0 +1,26 @@
+clusterName: ""
+environment: ""
+region: ""
+accountId: ""
+privateSubnetIds: []
+nodeSecurityGroupId: ""
+
+karpenter:
+  version: "1.3.3"
+  # reservedENIs: "1" — reserves one ENI per node to prevent exhaustion
+  # that would block Pod Identity agent communication.
+  reservedENIs: "1"
+
+keda:
+  version: "2.17.0"
+
+# NodePool defaults — override in production.yaml for prod-specific capacity types
+nodePools:
+  generalAmd64:
+    capacityType: ["spot", "on-demand"]
+    minMemoryGib: 4
+    maxMemoryGib: 128
+  generalArm64:
+    capacityType: ["spot", "on-demand"]
+    minMemoryGib: 4
+    maxMemoryGib: 64

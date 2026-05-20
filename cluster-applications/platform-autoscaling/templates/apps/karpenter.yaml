@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    # Delete=false — accidental NodePool deletion would drain the entire workload fleet
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  project: default
+  source:
+    chart: karpenter
+    repoURL: public.ecr.aws/karpenter
+    targetRevision: {{ .Values.karpenter.version }}
+    helm:
+      valuesObject:
+        settings:
+          clusterName: {{ .Values.clusterName | quote }}
+          interruptionQueueName: {{ .Values.clusterName | quote }}
+          reservedENIs: {{ .Values.karpenter.reservedENIs | quote }}
+          featureGates:
+            nodeRepair: true
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: system-node
+                      operator: In
+                      values:
+                        - "true"
+        priorityClassName: system-cluster-critical
+        resources:
+          requests: { cpu: 300m, memory: 1Gi }
+          limits:   { cpu: 1,    memory: 1Gi }
+        serviceMonitor:
+          enabled: true
+          additionalLabels:
+            release: kube-prometheus-stack
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: karpenter
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

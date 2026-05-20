@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keda
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    chart: keda
+    repoURL: https://kedacore.github.io/charts
+    targetRevision: {{ .Values.keda.version }}
+    helm:
+      valuesObject:
+        crds:
+          install: true
+        logging:
+          operator:
+            format: json
+            level: info
+        prometheus:
+          operator:
+            enabled: true
+            podMonitor:
+              enabled: true
+              additionalLabels:
+                release: kube-prometheus-stack
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: keda
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true, Replace=true]
+  ignoreDifferences:
+    - group: monitoring.coreos.com
+      kind: PodMonitor
+      jsonPointers: [/spec/podMetricsEndpoints/0/bearerTokenSecret]

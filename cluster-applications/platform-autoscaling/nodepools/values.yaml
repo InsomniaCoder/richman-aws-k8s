@@ -1,0 +1,9 @@
+clusterName: ""
+environment: ""
+region: ""
+accountId: ""
+nodePools:
+  generalAmd64:
+    disruptionBudgetSchedule: "0,15,30,45 * * * *"
+  generalArm64:
+    disruptionBudgetSchedule: "5,20,35,50 * * * *"

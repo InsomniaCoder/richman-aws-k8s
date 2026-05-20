@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter-nodepools
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.repoURL | quote }}
+    targetRevision: HEAD
+    path: cluster-applications/platform-autoscaling/nodepools
+    helm:
+      parameters:
+        - name: clusterName
+          value: {{ .Values.clusterName | quote }}
+        - name: region
+          value: {{ .Values.region | quote }}
+        - name: accountId
+          value: {{ .Values.accountId | quote }}
+      valueFiles:
+        - ../../environments/{{ .Values.environment }}.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: karpenter
+  syncPolicy:
+    automated: { prune: false, selfHeal: true }
+    syncOptions: [ServerSideApply=true]

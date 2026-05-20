@@ -1,0 +1,4 @@
+apiVersion: v2
+name: karpenter-nodepools
+description: Karpenter EC2NodeClass and NodePool definitions
+version: 0.1.0

@@ -1,0 +1,4 @@
+apiVersion: v2
+name: platform-autoscaling
+description: Karpenter, Karpenter NodePools/EC2NodeClasses, and KEDA
+version: 0.1.0
