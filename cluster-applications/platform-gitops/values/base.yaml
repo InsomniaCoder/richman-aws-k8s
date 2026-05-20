@@ -5,5 +5,4 @@ repoURL: ""
 
 velero:
   version: "7.2.1"
-  backupBucket: ""   # set from clusterName at render time: {{ .Values.clusterName }}-velero-backups
-  scheduleHour: "2"  # 02:00 UTC daily backup
+scheduleHour: "2"  # 02:00 UTC daily backup
