@@ -5,5 +5,4 @@
 *.tfvars
 live/**/backend.tf
 live/**/provider.tf
-**/.terraform.lock.hcl
 .env
