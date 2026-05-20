@@ -5,11 +5,6 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "2"
-  # Ignore replica drift — VPA and HPA manage replicas at runtime
-  ignoreDifferences:
-    - group: apps
-      kind: Deployment
-      jsonPointers: [/spec/replicas]
 spec:
   project: default
   source:
@@ -51,9 +46,23 @@ spec:
             operator: Equal
             value: "true"
             effect: NoSchedule
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: system-node
+                      operator: In
+                      values:
+                        - "true"
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [CreateNamespace=true]
+  # Ignore replica drift — VPA and HPA manage replicas at runtime
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]
