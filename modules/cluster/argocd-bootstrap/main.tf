@@ -77,6 +77,19 @@ resource "kubernetes_manifest" "app_of_apps" {
         targetRevision = "HEAD"
         path           = "cluster-applications/bootstrap"
         helm = {
+          # Runtime values (domain, clusterName, region, accountId, subnets, SG IDs) come
+          # from the ConfigMap written by Terraform — these are values Git cannot know.
+          # Environment-specific Git overrides (hostedZoneId, per-env tuning) live in the
+          # valueFile and merge on top.
+          valuesFrom = [
+            {
+              configMapKeyRef = {
+                name     = "platform-env-values"
+                key      = "values.yaml"
+                optional = false
+              }
+            }
+          ]
           valueFiles = ["../../cluster-applications/environments/${var.environment}.yaml"]
         }
       }
@@ -93,5 +106,5 @@ resource "kubernetes_manifest" "app_of_apps" {
       }
     }
   }
-  depends_on = [helm_release.argocd]
+  depends_on = [helm_release.argocd, kubernetes_config_map.env_values]
 }

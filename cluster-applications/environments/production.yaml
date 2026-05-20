@@ -1,0 +1,12 @@
+# Production environment overrides for the platform bootstrap chart.
+#
+# Runtime values (domain, clusterName, region, accountId, subnet IDs, SG IDs) are
+# injected automatically by Terraform via the platform-env-values ConfigMap — do not
+# repeat them here.
+#
+# Use this file for production-specific settings that are stable across deploys and
+# belong in Git: hosted zone IDs, version pins, replica counts, feature flags.
+
+# Route 53 hosted zone ID for ExternalDNS.
+# Find it: aws route53 list-hosted-zones --query 'HostedZones[*].[Name,Id]'
+hostedZoneId: ""   # e.g. Z0123456789ABCDEFGHIJ
