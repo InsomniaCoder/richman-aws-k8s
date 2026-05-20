@@ -1,0 +1,111 @@
+# Terraform apply workflow — applies changed stacks on merge to main.
+# DISABLED: remove the `if: false` condition on the job to enable.
+# Stack order is fixed (account before cluster) to respect dependencies.
+
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "live/**"
+      - "modules/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    if: false   # DISABLED — remove this line to enable
+    runs-on: ubuntu-latest
+    environment: production   # GitHub environment with required reviewers (recommended)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Apply in dependency order: account first, then cluster
+      - name: Apply account/vpc
+        uses: gruntwork-io/terragrunt-action@v2
+        with:
+          tf_version: "1.10.0"
+          tg_version: "0.68.0"
+          tg_command: apply
+          tg_dir: live/production/account/vpc
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_ADMIN_CIDR: ${{ vars.ADMIN_CIDR }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+      - name: Apply account/iam
+        uses: gruntwork-io/terragrunt-action@v2
+        with:
+          tf_version: "1.10.0"
+          tg_version: "0.68.0"
+          tg_command: apply
+          tg_dir: live/production/account/iam
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_ADMIN_CIDR: ${{ vars.ADMIN_CIDR }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+      - name: Apply account/ecr
+        uses: gruntwork-io/terragrunt-action@v2
+        with:
+          tf_version: "1.10.0"
+          tg_version: "0.68.0"
+          tg_command: apply
+          tg_dir: live/production/account/ecr
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_ADMIN_CIDR: ${{ vars.ADMIN_CIDR }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+      - name: Apply cluster/eks
+        uses: gruntwork-io/terragrunt-action@v2
+        with:
+          tf_version: "1.10.0"
+          tg_version: "0.68.0"
+          tg_command: apply
+          tg_dir: live/production/cluster/eks
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_ADMIN_CIDR: ${{ vars.ADMIN_CIDR }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+      - name: Apply cluster/karpenter
+        uses: gruntwork-io/terragrunt-action@v2
+        with:
+          tf_version: "1.10.0"
+          tg_version: "0.68.0"
+          tg_command: apply
+          tg_dir: live/production/cluster/karpenter
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_ADMIN_CIDR: ${{ vars.ADMIN_CIDR }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+      - name: Apply cluster/argocd-bootstrap
+        uses: gruntwork-io/terragrunt-action@v2
+        with:
+          tf_version: "1.10.0"
+          tg_version: "0.68.0"
+          tg_command: apply
+          tg_dir: live/production/cluster/argocd-bootstrap
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          TF_VAR_ADMIN_CIDR: ${{ vars.ADMIN_CIDR }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: '{"text":"❌ richman-aws-eks Terraform apply failed on `${{ github.sha }}`"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
