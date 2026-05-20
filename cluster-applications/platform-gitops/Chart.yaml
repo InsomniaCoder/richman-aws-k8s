@@ -1,0 +1,4 @@
+apiVersion: v2
+name: platform-gitops
+description: ArgoCD Projects, RBAC config, and Velero backups
+version: 0.1.0

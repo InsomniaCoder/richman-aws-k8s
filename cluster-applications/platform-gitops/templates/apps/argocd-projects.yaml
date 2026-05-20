@@ -1,0 +1,35 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Platform infrastructure components
+  sourceRepos:
+    - {{ .Values.repoURL | quote }}
+    - https://argoproj.github.io/argo-helm
+    - https://charts.jetstack.io
+    - https://aws.github.io/eks-charts
+    - https://helm.traefik.io/traefik
+    - https://charts.bitnami.com/bitnami
+    - https://charts.external-secrets.io
+    - https://kyverno.github.io/kyverno/
+    - public.ecr.aws/karpenter
+    - https://kedacore.github.io/charts
+    - https://open-telemetry.github.io/opentelemetry-helm-charts
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+    - https://vmware-tanzu.github.io/helm-charts
+    - https://charts.fairwinds.com/stable
+    - https://charts.deliveryhero.io/
+    - https://stakater.github.io/stakater-charts
+    - https://kubernetes-sigs.github.io/metrics-server/
+    - https://mogensen.github.io/yet-another-cloudwatch-exporter/
+    - https://adevinta.github.io/noe/
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"

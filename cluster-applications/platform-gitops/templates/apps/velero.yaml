@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+spec:
+  project: default
+  source:
+    chart: velero
+    repoURL: https://vmware-tanzu.github.io/helm-charts
+    targetRevision: {{ .Values.velero.version | quote }}
+    helm:
+      valuesObject:
+        configuration:
+          backupStorageLocation:
+            - name: default
+              provider: aws
+              bucket: {{ printf "%s-velero-backups" .Values.clusterName | quote }}
+              config:
+                region: {{ .Values.region | quote }}
+          volumeSnapshotLocation:
+            - name: default
+              provider: aws
+              config:
+                region: {{ .Values.region | quote }}
+        serviceAccount:
+          server:
+            name: velero
+        schedules:
+          daily-backup:
+            schedule: {{ printf "0 %s * * *" .Values.velero.scheduleHour | quote }}
+            template:
+              ttl: 720h
+              storageLocation: default
+              volumeSnapshotLocations:
+                - default
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
