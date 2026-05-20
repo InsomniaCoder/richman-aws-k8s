@@ -24,7 +24,7 @@ data "aws_ec2_instance_types" "system_fallback" {
   }
   filter {
     name   = "instance-type"
-    values = ["${substr(var.system_node_instance_type, 0, 1)}*"]
+    values = ["${split(".", var.system_node_instance_type)[0]}*"]
   }
 }
 

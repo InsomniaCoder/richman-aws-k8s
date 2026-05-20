@@ -84,7 +84,7 @@ resource "aws_eks_addon" "ebs_csi" {
   addon_name                  = "aws-ebs-csi-driver"
   addon_version               = var.addon_versions.ebs_csi
   resolve_conflicts_on_update = "OVERWRITE"
-  depends_on                  = [aws_eks_cluster.main]
+  depends_on                  = [aws_eks_node_group.system]
   tags                        = local.common_tags
 }
 
