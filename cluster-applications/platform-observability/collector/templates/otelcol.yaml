@@ -1,0 +1,77 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: platform
+  namespace: monitoring
+spec:
+  mode: daemonset
+  # Tolerate all taints — collector must run on every node to capture all container logs
+  tolerations:
+    - operator: Exists
+  config:
+    receivers:
+      # Log collection — reads container logs written by the container runtime
+      filelog:
+        include: [/var/log/pods/*/*/*.log]
+        include_file_path: true
+        operators:
+          - type: router
+            id: get-format
+            routes:
+              - output: parser-docker
+                expr: 'body matches "^\\{"'
+              - output: parser-crio
+                expr: 'body matches "^[^ Z]+ "'
+          - type: json_parser
+            id: parser-docker
+            output: extract-metadata
+          - type: regex_parser
+            id: parser-crio
+            regex: "^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]+) ?(?P<log>.*)$"
+            output: extract-metadata
+          - type: move
+            id: extract-metadata
+            from: attributes["log.file.path"]
+            to: resource["filename"]
+      # Receive OTLP traces and metrics from instrumented apps
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch: {}
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 400
+        spike_limit_mib: 100
+      k8sattributes:
+        extract:
+          metadata: [k8s.namespace.name, k8s.pod.name, k8s.container.name, k8s.node.name]
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+    exporters:
+      loki:
+        endpoint: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
+        default_labels_enabled:
+          exporter: false
+          job: true
+      prometheusremotewrite:
+        endpoint: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
+    service:
+      pipelines:
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [loki]
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [logging]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite]

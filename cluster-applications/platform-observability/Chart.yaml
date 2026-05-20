@@ -1,0 +1,4 @@
+apiVersion: v2
+name: platform-observability
+description: OTEL Operator, Prometheus, Loki, kubernetes-events-exporter, noe, yace
+version: 0.1.0

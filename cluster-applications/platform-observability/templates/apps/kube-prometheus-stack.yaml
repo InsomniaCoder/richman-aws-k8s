@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    # ServerSideDiff companion to ServerSideApply — prevents false positives in ArgoCD UI
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: default
+  source:
+    chart: kube-prometheus-stack
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: {{ .Values.kubePrometheusStack.version | quote }}
+    helm:
+      valuesObject:
+        prometheusOperator:
+          # Disable admission webhooks — avoids bootstrap chicken-and-egg with cert-manager
+          admissionWebhooks:
+            enabled: false
+          # Exclude irrelevant secret types — reduces API server watch load
+          secretFieldSelector: >-
+            type!=kubernetes.io/dockercfg,
+            type!=kubernetes.io/service-account-token,
+            type!=helm.sh/release.v1
+        prometheus:
+          prometheusSpec:
+            # Enable remote write receiver so OTEL collector can push metrics
+            enableRemoteWriteReceiver: true
+            retention: 15d
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp3
+                  resources:
+                    requests:
+                      storage: 50Gi
+            tolerations:
+              - key: system-node
+                operator: Equal
+                value: "true"
+                effect: NoSchedule
+        grafana:
+          adminPassword: {{ .Values.kubePrometheusStack.grafanaAdminPassword | default "changeme" | quote }}
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - grafana.{{ .Values.domain }}
+            tls:
+              - secretName: grafana-tls
+                hosts:
+                  - grafana.{{ .Values.domain }}
+            annotations:
+              cert-manager.io/cluster-issuer: letsencrypt-prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  # ServerSideApply=true — kube-prometheus-stack CRDs exceed client-side apply annotation size limit
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

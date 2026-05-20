@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: yace
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    chart: yet-another-cloudwatch-exporter
+    repoURL: https://mogensen.github.io/yet-another-cloudwatch-exporter/
+    targetRevision: {{ .Values.yace.version | quote }}
+    helm:
+      valuesObject:
+        serviceAccount:
+          name: "yace"
+        serviceMonitor:
+          enabled: true
+          additionalLabels:
+            release: kube-prometheus-stack
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]

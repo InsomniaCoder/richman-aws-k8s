@@ -1,0 +1,2 @@
+# Production overrides — grafanaAdminPassword should be injected via ExternalSecret,
+# not set here. Update loki.storageSize if retention increases.
