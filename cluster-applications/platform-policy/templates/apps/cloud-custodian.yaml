@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloud-custodian
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.repoURL | quote }}
+    targetRevision: HEAD
+    path: cluster-applications/platform-policy/custodian
+    helm:
+      parameters:
+        - name: schedule
+          value: {{ .Values.cloudCustodian.schedule | quote }}
+        - name: environment
+          value: {{ .Values.environment | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloud-custodian
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

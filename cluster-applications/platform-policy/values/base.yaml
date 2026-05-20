@@ -1,0 +1,10 @@
+clusterName: ""
+environment: ""
+
+kyverno:
+  version: "3.3.7"
+  admissionReplicas: 3
+
+cloudCustodian:
+  version: "0.9.40"
+  schedule: "0 6 * * *"   # daily at 06:00 UTC

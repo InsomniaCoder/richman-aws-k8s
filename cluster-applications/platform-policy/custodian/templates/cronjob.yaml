@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cloud-custodian
+  namespace: cloud-custodian
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cloud-custodian
+              image: cloudcustodian/c7n:latest
+              command:
+                - c7n
+                - run
+                - --configs
+                - /opt/policies/
+                - --output-dir
+                - /tmp/output
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+              volumeMounts:
+                - name: policies
+                  mountPath: /opt/policies
+          volumes:
+            - name: policies
+              configMap:
+                name: cloud-custodian-policies
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloud-custodian-policies
+  namespace: cloud-custodian
+data:
+  require-tags.yaml: |
+    policies:
+      - name: require-cost-tags-ec2
+        resource: ec2
+        filters:
+          - "tag:CostCenter": absent
+        actions:
+          - type: tag
+            key: CostCenterMissing
+            value: "true"
+  unused-ebs-volumes.yaml: |
+    policies:
+      - name: unused-ebs-volumes
+        resource: ebs
+        filters:
+          - State: available
+          - type: value
+            key: CreateTime
+            op: greater-than
+            value: 30
+            value_type: age
+        actions:
+          - type: tag
+            key: UnusedVolume
+            value: "true"

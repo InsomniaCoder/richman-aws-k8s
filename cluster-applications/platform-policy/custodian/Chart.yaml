@@ -1,0 +1,4 @@
+apiVersion: v2
+name: cloud-custodian
+description: Cloud Custodian governance CronJob with AWS policy enforcement
+version: 0.1.0

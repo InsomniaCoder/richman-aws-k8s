@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  project: default
+  source:
+    chart: kyverno
+    repoURL: https://kyverno.github.io/kyverno/
+    targetRevision: {{ .Values.kyverno.version | quote }}
+    helm:
+      valuesObject:
+        admissionController:
+          replicas: {{ .Values.kyverno.admissionReplicas }}
+          priorityClassName: system-cluster-critical
+          tolerations:
+            - key: system-node
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: system-node
+                        operator: In
+                        values:
+                          - "true"
+          resources:
+            # CPU request = limit — no bursting on admission webhook path
+            requests:
+              cpu: 1
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 256Mi
+          rbac:
+            coreClusterRole:
+              extraResources:
+                # Allow Kyverno to read Karpenter objects for policy validation
+                - apiGroups: [karpenter.sh]
+                  resources: [nodeclaims, nodepools]
+                  verbs: [get, list, watch]
+        config:
+          # Exclude Binding and Pod/binding — intercepting these adds latency
+          # to every pod scheduling operation
+          resourceFiltersExclude:
+            - "[Binding,*,*]"
+            - "[Pod/binding,*,*]"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /metadata/annotations
+        - /metadata/labels
