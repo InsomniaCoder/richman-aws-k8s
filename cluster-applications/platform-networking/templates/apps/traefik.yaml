@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  # Ignore replica drift — VPA and HPA manage replicas at runtime
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]
+spec:
+  project: default
+  source:
+    chart: traefik
+    repoURL: https://helm.traefik.io/traefik
+    targetRevision: {{ .Values.traefik.version }}
+    helm:
+      valuesObject:
+        deployment:
+          replicas: {{ .Values.traefik.replicas }}
+        # NLB is provisioned by AWS LBC via this service annotation
+        service:
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: "external"
+            service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+            service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+            service.beta.kubernetes.io/aws-load-balancer-security-groups: {{ .Values.nlbSecurityGroupId | quote }}
+        # Graceful shutdown — post-shutdown-grace-period must be < terminationGracePeriodSeconds.
+        # 181s < 200s ensures connections drain before the pod is killed.
+        terminationGracePeriodSeconds: 200
+        extraArgs:
+          - --entrypoints.web.transport.lifecycle.requestAcceptGraceTimeout=181
+          - --entrypoints.websecure.transport.lifecycle.requestAcceptGraceTimeout=181
+        # No resource limits on ingress controller pods.
+        # Hard limits cause CPU throttling during traffic spikes.
+        # VPA provides right-sizing recommendations.
+        resources:
+          requests: { cpu: 100m, memory: 128Mi }
+        updateStrategy:
+          rollingUpdate:
+            # Zero disruption during deploys
+            maxUnavailable: 0
+            maxSurge: 1
+        podDisruptionBudget:
+          enabled: true
+          minAvailable: 1
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]

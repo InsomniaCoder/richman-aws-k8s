@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    chart: external-dns
+    repoURL: https://charts.bitnami.com/bitnami
+    targetRevision: {{ .Values.externalDns.version }}
+    helm:
+      valuesObject:
+        provider: aws
+        aws:
+          region: {{ .Values.region | quote }}
+          zoneType: public
+        # txtOwnerId MUST be set to cluster name.
+        # Without this, a second cluster will delete this cluster's DNS records.
+        txtOwnerId: {{ .Values.clusterName | quote }}
+        # policy: sync — creates AND deletes records. Requires correct txtOwnerId.
+        policy: {{ .Values.externalDns.policy | default "upsert-only" | quote }}
+        # Scope to one hosted zone — prevents cross-zone accidents
+        domainFilters:
+          - {{ .Values.domain | quote }}
+        # Exclude AAAA (IPv6) — cluster is IPv4 only
+        excludeRecordTypes:
+          - AAAA
+        interval: 10m
+        triggerLoopOnEvent: true
+        minEventSyncInterval: 5m
+        resources:
+          requests: { cpu: 50m, memory: 200Mi }
+          limits:   { cpu: 200m, memory: 512Mi }
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]

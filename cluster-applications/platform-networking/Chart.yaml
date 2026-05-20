@@ -1,0 +1,4 @@
+apiVersion: v2
+name: platform-networking
+description: Ingress stack — AWS LBC, Traefik, cert-manager, ExternalDNS
+version: 0.1.0

@@ -1,0 +1,22 @@
+clusterName: ""
+environment: ""
+domain: ""
+accountId: ""
+region: ""
+nlbSecurityGroupId: ""
+hostedZoneId: ""    # set in production.yaml — your Route 53 hosted zone ID
+
+certManager:
+  version: "v1.17.0"
+  maxConcurrentChallenges: 15
+
+awsLbc:
+  version: "1.11.0"
+
+traefik:
+  version: "33.0.0"
+  replicas: 2
+
+externalDns:
+  version: "1.15.0"
+  txtOwnerId: ""    # set from clusterName at render time

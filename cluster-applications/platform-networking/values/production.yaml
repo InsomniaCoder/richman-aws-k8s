@@ -1,0 +1,7 @@
+traefik:
+  replicas: 2
+
+externalDns:
+  # policy: sync creates AND deletes records when Ingresses are removed.
+  # txtOwnerId prevents multi-cluster record collisions — set to cluster name.
+  policy: sync

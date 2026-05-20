@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    # Wave 2 — but cert-manager must be healthy before LBC/Traefik/ESO install
+    # (they use cert-manager for webhook TLS). Deploy it first within wave 2.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    chart: cert-manager
+    repoURL: https://charts.jetstack.io
+    targetRevision: {{ .Values.certManager.version }}
+    helm:
+      valuesObject:
+        installCRDs: true
+        # crds.keep: true — without this, helm uninstall deletes all Certificate objects
+        crds:
+          keep: true
+        extraArgs:
+          - --issuer-ambient-credentials
+          - --max-concurrent-challenges={{ .Values.certManager.maxConcurrentChallenges }}
+        # Disable admission webhooks — avoids bootstrap ordering issues
+        webhook:
+          securePort: 10260
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: system-node
+                    operator: In
+                    values:
+                      - "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

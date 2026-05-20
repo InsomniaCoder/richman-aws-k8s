@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    chart: aws-load-balancer-controller
+    repoURL: https://aws.github.io/eks-charts
+    targetRevision: {{ .Values.awsLbc.version }}
+    helm:
+      valuesObject:
+        clusterName: {{ .Values.clusterName | quote }}
+        region: {{ .Values.region | quote }}
+        # Disable service mutator webhook — prevents unintended LB creation
+        # on Services that don't explicitly set LBC annotations.
+        enableServiceMutatorWebhook: false
+        # Use cert-manager for webhook TLS (consistent with cert-manager-first approach)
+        enableCertManager: true
+        tolerations:
+          - key: system-node
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: system-node
+                      operator: In
+                      values:
+                        - "true"
+        resources:
+          requests: { cpu: 100m, memory: 128Mi }
+          limits:   { cpu: 1,    memory: 1Gi }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
