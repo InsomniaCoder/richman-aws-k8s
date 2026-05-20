@@ -44,7 +44,7 @@ resource "aws_sqs_queue_policy" "interruption" {
         Principal = "*"
         Action    = "sqs:*"
         Resource  = aws_sqs_queue.interruption.arn
-        Condition = { Bool = { "aws:SecureTransport" = false } }
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
       }
     ]
   })
