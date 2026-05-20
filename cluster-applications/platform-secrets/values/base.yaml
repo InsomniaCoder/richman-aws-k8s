@@ -1,0 +1,9 @@
+clusterName: ""
+environment: ""
+region: ""
+
+eso:
+  version: "0.12.1"
+  concurrent: 100
+  clientBurst: 200
+  clientQps: 100

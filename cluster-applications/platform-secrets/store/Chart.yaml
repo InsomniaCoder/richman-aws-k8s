@@ -1,0 +1,4 @@
+apiVersion: v2
+name: cluster-secret-store
+description: ClusterSecretStore backed by AWS Secrets Manager via Pod Identity
+version: 0.1.0

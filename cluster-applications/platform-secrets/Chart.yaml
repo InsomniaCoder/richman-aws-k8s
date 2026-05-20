@@ -1,0 +1,4 @@
+apiVersion: v2
+name: platform-secrets
+description: External Secrets Operator and ClusterSecretStore backed by AWS Secrets Manager
+version: 0.1.0
