@@ -9,23 +9,25 @@
 ### Topology — 3 AZs, 3 subnet tiers
 
 ```
-VPC 10.0.0.0/16
-│
+Primary CIDR:   10.0.0.0/16    (nodes, load balancers, NAT)
+Secondary CIDR: 100.64.0.0/10  (pods only — RFC 6598)
+
+VPC
 ├── AZ-a
-│   ├── Public  10.0.0.0/24     NLB, NAT Gateway — no nodes
-│   ├── Private 10.0.10.0/24    System nodes, Karpenter workload nodes
-│   └── Pod     10.0.64.0/18    Pod IPs only (VPC CNI ENIConfig)
+│   ├── Public  10.0.0.0/24      NLB, NAT Gateway — no nodes
+│   ├── Private 10.0.10.0/24     System nodes, Karpenter workload nodes
+│   └── Pod     100.64.0.0/12    Pod IPs only (VPC CNI ENIConfig)
 ├── AZ-b
 │   ├── Public  10.0.1.0/24
 │   ├── Private 10.0.11.0/24
-│   └── Pod     10.0.128.0/18
+│   └── Pod     100.80.0.0/12
 └── AZ-c
     ├── Public  10.0.2.0/24
     ├── Private 10.0.12.0/24
-    └── Pod     10.0.192.0/18
+    └── Pod     100.96.0.0/12
 ```
 
-**Why dedicated pod subnets:** With VPC CNI custom networking (`AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true`), pod IPs come from the pod subnets rather than the node subnets. A /24 node subnet has 251 usable IPs which could be exhausted by ~30 nodes. /18 pod subnets have 16,384 IPs each. Combined with prefix delegation (`ENABLE_PREFIX_DELEGATION=true`), a single m6i.2xlarge can run 100+ pods by receiving /28 blocks (16 IPs) per ENI prefix.
+**Why dedicated pod subnets with RFC 6598 space:** Pod IPs come from a secondary CIDR block (`100.64.0.0/10`) attached to the VPC rather than the primary `10.0.0.0/16`. This cleanly separates pod and node address space and avoids collision with corporate on-premises ranges that typically use `10.x.x.x`. Each AZ gets a /12 (1M+ IPs). Combined with prefix delegation (`ENABLE_PREFIX_DELEGATION=true`), IP exhaustion is effectively impossible. In a multi-cluster account, allocate a different sub-range of the /10 per cluster via the `pod_cidr` variable — e.g. cluster-1: `100.64.0.0/12`, cluster-2: `100.80.0.0/12`.
 
 **Pod subnet ENIConfig:** Each pod subnet is tagged `topology.kubernetes.io/zone=<az>` matching `ENI_CONFIG_LABEL_DEF`. The CNI selects the correct subnet automatically based on the node's AZ label.
 

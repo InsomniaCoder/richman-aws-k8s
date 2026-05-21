@@ -1,12 +1,14 @@
 locals {
   # 3 AZs × 3 tiers (public/private/pod)
-  # Public:  10.0.{0,1,2}.0/24     (one per AZ — for NLB/ALB and NAT GW)
-  # Private: 10.0.{10,11,12}.0/24  (one per AZ — for nodes)
-  # Pod:     10.0.{64,128,192}.0/18 (one per AZ — for pod IPs via VPC CNI)
+  # Public:  10.0.{0,1,2}.0/24      (one per AZ — for NLB/ALB and NAT GW)
+  # Private: 10.0.{10,11,12}.0/24   (one per AZ — for nodes)
+  # Pod:     100.64.0.0/12, 100.80.0.0/12, 100.96.0.0/12 (from secondary RFC 6598 CIDR)
   az_count      = length(var.availability_zones)
   public_cidrs  = [for i in range(local.az_count) : cidrsubnet(var.vpc_cidr, 8, i)]
   private_cidrs = [for i in range(local.az_count) : cidrsubnet(var.vpc_cidr, 8, 10 + i)]
-  pod_cidrs     = [for i in range(local.az_count) : cidrsubnet(var.vpc_cidr, 2, 1 + i)]
+  # /10 split into /12s: each /12 = 1,048,576 IPs per AZ — prefix delegation makes
+  # exhaustion effectively impossible even at thousands of pods per node.
+  pod_cidrs     = [for i in range(local.az_count) : cidrsubnet(var.pod_cidr, 2, i)]
 
   common_tags = merge(var.tags, {
     Project     = var.project_name
@@ -51,11 +53,21 @@ resource "aws_subnet" "pod" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = local.pod_cidrs[count.index]
   availability_zone = var.availability_zones[count.index]
+  # Must wait for the secondary CIDR block to be attached before subnets can be created from it
+  depends_on = [aws_vpc_ipv4_cidr_block_association.pod]
   tags = merge(local.common_tags, {
     Name                              = "${var.project_name}-pod-${var.availability_zones[count.index]}"
     # Used by VPC CNI ENI_CONFIG_LABEL_DEF to select the right subnet per AZ
     "topology.kubernetes.io/zone"     = var.availability_zones[count.index]
   })
+}
+
+# Attach RFC 6598 address space as a secondary CIDR for pod subnets.
+# Pod IPs are drawn from this range rather than the primary 10.0.0.0/16 block,
+# keeping node and pod address spaces cleanly separated.
+resource "aws_vpc_ipv4_cidr_block_association" "pod" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = var.pod_cidr
 }
 
 resource "aws_internet_gateway" "main" {

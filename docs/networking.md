@@ -7,22 +7,25 @@ This document covers the full network stack — from VPC topology to in-cluster 
 ## VPC topology
 
 ```
-VPC 10.0.0.0/16
+Primary CIDR:    10.0.0.0/16     (nodes, load balancers, NAT)
+Secondary CIDR:  100.64.0.0/10   (pods only — RFC 6598 address space)
+
+VPC
 │
 ├── AZ-a (eu-west-1a)
-│   ├── Public  10.0.0.0/24      NLB, NAT Gateway — no nodes run here
-│   ├── Private 10.0.10.0/24     EKS system nodes + Karpenter workload nodes
-│   └── Pod     10.0.64.0/18     Pod IPs only (VPC CNI ENIConfig)
+│   ├── Public  10.0.0.0/24        NLB, NAT Gateway — no nodes run here
+│   ├── Private 10.0.10.0/24       EKS system nodes + Karpenter workload nodes
+│   └── Pod     100.64.0.0/12      Pod IPs only (VPC CNI ENIConfig)
 │
 ├── AZ-b (eu-west-1b)
 │   ├── Public  10.0.1.0/24
 │   ├── Private 10.0.11.0/24
-│   └── Pod     10.0.128.0/18
+│   └── Pod     100.80.0.0/12
 │
 └── AZ-c (eu-west-1c)
     ├── Public  10.0.2.0/24
     ├── Private 10.0.12.0/24
-    └── Pod     10.0.192.0/18
+    └── Pod     100.96.0.0/12
 ```
 
 ### Why three subnet tiers
@@ -31,7 +34,11 @@ VPC 10.0.0.0/16
 
 **Private** subnets hold nodes. Egress goes through the NAT Gateway. Inbound traffic arrives only through the load balancer tier (NLB → Traefik). Nodes are not reachable from the internet directly.
 
-**Pod** subnets exist solely to give pods their own routable IP space. Without them, VPC CNI allocates pod IPs from the node subnet — a /24 (251 usable IPs) is exhausted by ~30 heavily-scheduled nodes. The /18 pod subnets (16,384 IPs each) combined with prefix delegation make IP exhaustion effectively impossible.
+**Pod** subnets live in a separate secondary CIDR block (`100.64.0.0/10`, RFC 6598 address space) attached to the VPC. Each AZ gets a /12 (1,048,576 IPs). This cleanly separates pod and node address space — no risk of pod IPs colliding with node IPs or with corporate on-premises ranges that typically use `10.x.x.x`.
+
+Using RFC 6598 space is the recommended EKS pattern for large clusters. `100.64.0.0/10` is not routable on the public internet and is not commonly used in corporate networks, making it safe for VPC secondary CIDRs.
+
+**Multi-cluster note:** In a real environment with multiple clusters sharing the same VPC (or the same AWS account), allocate a sub-range of the /10 per cluster to avoid ENIConfig subnet overlap. For example: cluster-1 uses `100.64.0.0/12`, cluster-2 uses `100.80.0.0/12`, cluster-3 uses `100.96.0.0/12`. This is controlled by the `pod_cidr` variable in the VPC module. Each cluster's Terragrunt `env.hcl` sets a different `pod_cidr`.
 
 ### NAT Gateways
 
@@ -54,7 +61,7 @@ ENI_CONFIG_LABEL_DEF               = topology.kubernetes.io/zone
 NETWORK_POLICY_ENFORCING_MODE      = standard
 ```
 
-**Prefix delegation** — instead of allocating one IP per ENI slot, the CNI allocates /28 blocks (16 IPs) per slot. An `m6i.xlarge` with 3 ENIs × 10 slots would normally hold 30 pods; with prefix delegation it holds 30 × 16 = 480 pod IPs. Combined with pod subnets, a single node can run well over 100 pods without IP exhaustion.
+**Prefix delegation** — instead of allocating one IP per ENI slot, the CNI allocates /28 blocks (16 IPs) per slot. An `m6i.xlarge` with 3 ENIs × 10 slots would normally hold 30 pods; with prefix delegation it holds 30 × 16 = 480 pod IPs. The /12 pod subnets (1M+ IPs each) make exhaustion effectively impossible even at this scale.
 
 **Custom network mode** — pod IPs come from ENIConfigs pointing at pod subnets rather than the node's primary subnet. Required to use the dedicated pod subnets.
 
