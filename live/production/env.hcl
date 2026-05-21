@@ -10,8 +10,12 @@ locals {
   # Edit these before deploying:
   cluster_name       = "richman-production"
   kubernetes_version = "1.31"
-  domain_name        = get_env("DOMAIN_NAME", "")        # your Route 53 domain
-  admin_cidr         = get_env("TF_VAR_ADMIN_CIDR", "")  # your IP/VPN CIDR for kubectl access
+  domain_name        = get_env("DOMAIN_NAME", "")   # your Route 53 domain
+
+  # CIDRs allowed to reach the EKS API server (port 443).
+  # Managed by scripts/update-admin-cidrs.sh — updated automatically via scheduled GitHub Action.
+  # To add a CIDR manually: edit live/production/admin-cidrs.json and open a PR.
+  admin_cidrs = jsondecode(file("${get_terragrunt_dir()}/../admin-cidrs.json")).cidrs
 
   # Availability zones — must be valid for the chosen region
   availability_zones = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]

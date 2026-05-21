@@ -49,7 +49,7 @@ inputs = {
   cluster_name       = local.l.cluster_name
   environment        = local.l.environment
   kubernetes_version = local.l.kubernetes_version
-  admin_cidr         = local.l.admin_cidr
+  admin_cidrs        = local.l.admin_cidrs
   availability_zones = local.l.availability_zones
 
   vpc_id             = local.vpc_id

@@ -28,7 +28,7 @@ resource "aws_eks_cluster" "main" {
     security_group_ids      = [aws_security_group.control_plane.id]
     endpoint_private_access = true
     endpoint_public_access  = true
-    public_access_cidrs     = split(",", var.admin_cidr)
+    public_access_cidrs     = var.admin_cidrs
   }
 
   access_config {

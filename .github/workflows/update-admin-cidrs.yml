@@ -1,0 +1,109 @@
+# Automatically update the EKS API server IP whitelist.
+#
+# Runs on a schedule and on manual trigger. Fetches the current set of CIDRs
+# (GitHub Actions egress IPs, static VPN/office CIDRs defined in the script),
+# diffs against live/production/admin-cidrs.json, and opens a PR if anything changed.
+#
+# No PR is opened if the file is already up to date — idempotent.
+#
+# To add permanent CIDRs (VPN gateway, office NAT): edit STATIC_CIDRS in
+# scripts/update-admin-cidrs.sh and commit. This workflow keeps dynamic ranges
+# (GitHub Actions IPs) current automatically.
+
+name: Update Admin CIDRs
+
+on:
+  schedule:
+    # Run weekly on Monday 06:00 UTC — GitHub Actions IP ranges change infrequently
+    # but do change. Weekly is frequent enough to catch rotations before they cause
+    # CI failures (runner can't reach API server).
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment directory under live/ to update"
+        default: "production"
+        required: false
+
+permissions:
+  contents: write      # to push the branch
+  pull-requests: write # to open the PR
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run bats tests first
+        run: |
+          sudo apt-get install -y bats 2>/dev/null || brew install bats-core 2>/dev/null || true
+          # If bats is available, run tests before touching the real file
+          if command -v bats &>/dev/null; then
+            bats tests/update-admin-cidrs.bats
+          else
+            echo "bats not available — skipping tests (install bats-core to enable)"
+          fi
+
+      - name: Fetch and update CIDRs
+        id: update
+        run: |
+          ENV="${{ github.event.inputs.environment || 'production' }}"
+          bash scripts/update-admin-cidrs.sh --env "live/$ENV" --no-my-ip
+          # Detect whether the file changed
+          if git diff --quiet "live/$ENV/admin-cidrs.json"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open PR if CIDRs changed
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          ENV="${{ github.event.inputs.environment || 'production' }}"
+          BRANCH="chore/update-admin-cidrs-$(date +%Y%m%d)"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add "live/$ENV/admin-cidrs.json"
+          git commit -m "chore: update EKS API server CIDR whitelist ($(date +%Y-%m-%d))"
+          git push origin "$BRANCH"
+
+          # Compute a summary of what changed for the PR body
+          DIFF="$(git diff HEAD~1 -- "live/$ENV/admin-cidrs.json" | grep '^[+-]' | grep -v '^[+-][+-][+-]' || true)"
+
+          gh pr create \
+            --title "chore: update EKS API server CIDR whitelist" \
+            --body "$(cat <<EOF
+          ## Summary
+
+          The EKS API server IP whitelist (\`live/$ENV/admin-cidrs.json\`) has changed.
+          This PR was opened automatically by the scheduled \`update-admin-cidrs\` workflow.
+
+          **What changed:**
+          \`\`\`diff
+          $DIFF
+          \`\`\`
+
+          **Sources checked:**
+          - GitHub Actions egress IPs (\`api.github.com/meta\` → \`.actions[]\`)
+          - Static CIDRs defined in \`scripts/update-admin-cidrs.sh\`
+
+          **Review checklist:**
+          - [ ] No unexpected IPs added
+          - [ ] Previously whitelisted CIDRs that disappeared are no longer needed
+          - [ ] Total count remains under 40 (AWS hard limit)
+
+          After merging, the next \`terragrunt apply\` on \`cluster/eks\` will apply the change.
+          EOF
+          )" \
+            --label "infrastructure,automated" \
+            --head "$BRANCH"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: No change
+        if: steps.update.outputs.changed == 'false'
+        run: echo "✓ admin-cidrs.json is already up to date — no PR needed."

@@ -1,0 +1,6 @@
+{
+  "_comment": "Authoritative list of CIDRs allowed to reach the EKS API server (port 443).",
+  "_comment2": "Managed by scripts/update-admin-cidrs.sh — do not edit manually.",
+  "_comment3": "AWS hard limit: 40 CIDRs. Sources are defined in scripts/update-admin-cidrs.sh.",
+  "cidrs": []
+}
