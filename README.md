@@ -25,7 +25,7 @@ The companion to [poorman-aws-k8s](https://github.com/insomniacoder/poorman-aws-
 - Terragrunt v1
 - kubectl
 - helm
-- A domain hosted in Route 53
+- A domain registered with a registrar and hosted in Route 53 (registrar registration is separate — use Route 53 Registrar or point your registrar's NS records to the Route 53 hosted zone)
 
 ## First deploy
 
