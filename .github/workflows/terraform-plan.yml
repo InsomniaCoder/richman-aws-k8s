@@ -4,6 +4,11 @@
 #   1. Create an AWS IAM role for GitHub OIDC: trust sts.amazonaws.com for token.actions.githubusercontent.com
 #   2. Set GitHub repo secret: AWS_ROLE_ARN = arn:aws:iam::<account>:role/<name>
 #   3. Set GitHub repo variable: AWS_REGION = your region
+#
+# Plan strategy: pull state first, plan against local copy, no lock held during plan.
+# This prevents lock contention when multiple PRs run matrix plans in parallel.
+# Only `apply` (on merge) acquires a real state lock.
+# See scripts/plan.sh for the equivalent local command.
 
 name: Terraform Plan
 
@@ -23,6 +28,7 @@ jobs:
     if: false   # DISABLED — remove this line to enable
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false   # continue other stacks if one fails
       matrix:
         stack:
           - live/production/account/vpc
@@ -44,21 +50,30 @@ jobs:
         with:
           tf_version: "1.10.0"
           tg_version: "0.68.0"
-          tg_command: plan
+          # Pull state into a local file first — avoids holding a remote lock
+          # for the full plan duration (causes contention under parallel matrix jobs).
+          tg_command: state pull > /tmp/tg-plan-state.tfstate && terragrunt plan -state=/tmp/tg-plan-state.tfstate -lock=false -out=/tmp/tg-plan.out
           tg_dir: ${{ matrix.stack }}
+        id: plan
         env:
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
           TF_VAR_ADMIN_CIDR: ${{ vars.ADMIN_CIDR }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
 
-      - uses: actions/github-script@v7
+      - name: Post plan as PR comment
+        uses: actions/github-script@v7
         if: always()
         with:
           script: |
-            const output = `### Terraform Plan: \`${{ matrix.stack }}\`
+            const status = '${{ steps.plan.outcome }}' === 'success' ? '✅' : '❌';
+            const output = `### ${status} Terraform Plan: \`${{ matrix.stack }}\`
+
+            <details><summary>Show plan</summary>
+
             \`\`\`
             ${{ steps.plan.outputs.stdout }}
-            \`\`\``;
+            \`\`\`
+            </details>`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
